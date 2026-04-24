@@ -1,0 +1,57 @@
+{
+  "name": "amp-themes",
+  "version": "0.1.0",
+  "description": "Amp-inspired Pi UI suite: theme, editor chrome, and compact tool display.",
+  "keywords": [
+    "pi-package",
+    "pi-theme",
+    "pi-extension",
+    "pi-coding-agent",
+    "amp",
+    "tui",
+    "tool-rendering"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "extensions",
+    "themes"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "check": "pi --no-extensions --no-themes -e . --theme ./themes -p 'Reply with ok'",
+    "pack:check": "npm pack --dry-run",
+    "release:check": "npm run typecheck && npm run check && npm run pack:check"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions",
+      "./node_modules/pi-tool-display/index.ts"
+    ],
+    "themes": [
+      "./themes"
+    ]
+  },
+  "dependencies": {
+    "pi-tool-display": "^0.3.3"
+  },
+  "bundledDependencies": [
+    "pi-tool-display"
+  ],
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-tui": "*"
+  },
+  "devDependencies": {
+    "@mariozechner/pi-coding-agent": "^0.70.2",
+    "@mariozechner/pi-tui": "^0.70.2",
+    "@types/node": "^24.12.2",
+    "typescript": "^5.9.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
