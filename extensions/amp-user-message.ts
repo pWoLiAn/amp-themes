@@ -116,21 +116,22 @@ function patchUserMessageRender(getTheme: () => ThemeLike | undefined, getThinki
 
 export default function (pi: ExtensionAPI) {
   let activeTheme: ThemeLike | undefined;
-  let getActiveThinkingLevel = () => "off";
+  let activeThinkingLevel = "off";
 
   const getTheme = () => activeTheme;
-  const getThinkingLevel = () => getActiveThinkingLevel();
+  const getThinkingLevel = () => activeThinkingLevel;
 
   patchUserMessageRender(getTheme, getThinkingLevel);
 
   pi.on("session_start", (_event, ctx) => {
     if (!ctx.hasUI) return;
     activeTheme = ctx.ui.theme;
-    getActiveThinkingLevel = () => getThinkingLevelFromSession(ctx.sessionManager);
+    activeThinkingLevel = getThinkingLevelFromSession(ctx.sessionManager);
     patchUserMessageRender(getTheme, getThinkingLevel);
   });
 
-  pi.on("before_agent_start", () => {
+  pi.on("before_agent_start", (_event, ctx) => {
+    activeThinkingLevel = getThinkingLevelFromSession(ctx.sessionManager);
     patchUserMessageRender(getTheme, getThinkingLevel);
   });
 }

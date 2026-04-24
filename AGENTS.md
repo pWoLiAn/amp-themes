@@ -1,5 +1,7 @@
 # Repository Guidelines
 
+Maintainer: Frank.
+
 ## Project Structure & Module Organization
 
 This package ships an Amp-inspired Pi UI bundle. Theme assets live in `themes/`, currently `themes/amp-gruvbox-dark-hard.json`. Pi extension code lives in `extensions/`, including editor chrome and user message rendering. Agent-facing setup guidance lives in `skills/configure-amp-themes/SKILL.md`. Package metadata, Pi registration, and scripts are in `package.json`; TypeScript settings are in `tsconfig.json`.

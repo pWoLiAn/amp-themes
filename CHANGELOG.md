@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.5
+
+- Replace the working indicator with Amp-style `~ → ≈ → ≋` animation.
+- Show `Waiting for response...` before the assistant starts and only switch to `Streaming response...` once assistant updates arrive.
+- Show `Running tools...` while tool executions are active.
+- Avoid stale session context crashes in Amp user message rendering after session replacement or reload.
+- Darken the theme page background.
+- Add a README screenshot as a repo-only asset.
+- Add a release skill to keep npm publishing steps consistent.
+
+## 0.2.4
+
+- Published package maintenance update.
+
 ## 0.2.3
 
 - Move git change summary out of the editor border and right-align it below the editor.

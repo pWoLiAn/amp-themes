@@ -79,14 +79,24 @@ function resetUserMessagePatch(): void {
   delete prototype.__ampUserMessagePatched;
 }
 
-test("amp user message render stays safe after pi runtime becomes stale", () => {
+test("amp user message render stays safe after session manager becomes stale", () => {
   resetUserMessagePatch();
 
   let stale = false;
-  const { pi, handlers } = createPiStub(() => {
-    if (stale) throw new Error("stale runtime");
-    return "medium";
-  });
+  const sessionManager = createSessionManager();
+  const staleAwareSessionManager = {
+    ...sessionManager,
+    getEntries() {
+      if (stale) throw new Error("stale session manager");
+      return sessionManager.getEntries();
+    },
+    getLeafId() {
+      if (stale) throw new Error("stale session manager");
+      return sessionManager.getLeafId();
+    },
+  };
+
+  const { pi, handlers } = createPiStub(() => "medium");
 
   ampUserMessageExtension(pi);
 
@@ -97,7 +107,7 @@ test("amp user message render stays safe after pi runtime becomes stale", () => 
     { type: "session_start", reason: "startup" },
     {
       hasUI: true,
-      sessionManager: createSessionManager(),
+      sessionManager: staleAwareSessionManager,
       ui: { theme: createThemeStub() },
     } as unknown as ExtensionContext,
   );
@@ -109,6 +119,85 @@ test("amp user message render stays safe after pi runtime becomes stale", () => 
   assert.doesNotThrow(() => message.render(48));
 
   resetUserMessagePatch();
+});
+
+test("amp editor working message waits until assistant update before streaming", () => {
+  const { pi, handlers } = createPiStub(() => "medium");
+  const workingMessages: Array<string | undefined> = [];
+
+  ampEditorExtension(pi);
+
+  const sessionStart = handlers.get("session_start");
+  assert.ok(sessionStart, "session_start handler should be registered");
+
+  const ctx = {
+    hasUI: true,
+    cwd: process.cwd(),
+    model: {
+      id: "claude-sonnet-4-20250514",
+      contextWindow: 200000,
+      reasoning: true,
+    },
+    modelRegistry: { isUsingOAuth: () => false },
+    sessionManager: createSessionManager(),
+    getContextUsage: () => ({ percent: 12, contextWindow: 200000 }),
+    ui: {
+      theme: createThemeStub(),
+      setEditorComponent() {},
+      setWorkingIndicator() {},
+      setWorkingMessage(message?: string) {
+        workingMessages.push(message);
+      },
+      setFooter() {},
+    },
+  } as unknown as ExtensionContext;
+
+  sessionStart({ type: "session_start", reason: "startup" }, ctx);
+
+  const beforeAgentStart = handlers.get("before_agent_start");
+  assert.ok(beforeAgentStart, "before_agent_start handler should be registered");
+  beforeAgentStart({ type: "before_agent_start" }, ctx);
+  assert.equal(workingMessages.at(-1), "Waiting for response...");
+
+  const messageStart = handlers.get("message_start");
+  messageStart?.({ type: "message_start", message: { role: "assistant", content: [] } }, ctx);
+  assert.equal(workingMessages.at(-1), "Waiting for response...");
+
+  const messageUpdate = handlers.get("message_update");
+  assert.ok(messageUpdate, "message_update handler should be registered");
+  messageUpdate(
+    {
+      type: "message_update",
+      assistantMessageEvent: { type: "text_delta" },
+      message: { role: "assistant", content: [{ type: "text", text: "hello" }] },
+    },
+    ctx,
+  );
+  assert.equal(workingMessages.at(-1), "Streaming response...");
+});
+
+test("amp editor shows running tools while tool execution is active", () => {
+  const { pi, handlers } = createPiStub(() => "medium");
+  const workingMessages: Array<string | undefined> = [];
+
+  ampEditorExtension(pi);
+
+  const toolExecutionStart = handlers.get("tool_execution_start");
+  assert.ok(toolExecutionStart, "tool_execution_start handler should be registered");
+
+  toolExecutionStart(
+    { type: "tool_execution_start", toolCallId: "tool-1", toolName: "read", args: {} },
+    {
+      hasUI: true,
+      ui: {
+        setWorkingMessage(message?: string) {
+          workingMessages.push(message);
+        },
+      },
+    } as unknown as ExtensionContext,
+  );
+
+  assert.equal(workingMessages.at(-1), "Running tools...");
 });
 
 test("amp editor render stays safe after pi runtime becomes stale", () => {

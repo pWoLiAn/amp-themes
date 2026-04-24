@@ -7,6 +7,7 @@ import { relative } from "node:path";
 const MIN_BODY_LINES = 2;
 const GIT_CACHE_MS = 2000;
 const STATUS_RIGHT_INSET = 1;
+const WORKING_FRAMES = ["~", "≈", "≋"];
 
 type GitInfo = {
   branch: string | null;
@@ -297,6 +298,8 @@ class AmpEditor extends CustomEditor {
 }
 
 export default function (pi: ExtensionAPI) {
+  const activeToolExecutions = new Set<string>();
+
   pi.on("session_start", (_event, ctx) => {
     if (!ctx.hasUI) return;
 
@@ -307,9 +310,10 @@ export default function (pi: ExtensionAPI) {
     );
 
     ctx.ui.setWorkingIndicator({
-      frames: [ctx.ui.theme.fg("accent", "∴")],
+      frames: WORKING_FRAMES.map((frame) => ctx.ui.theme.fg("accent", frame)),
+      intervalMs: 160,
     });
-    ctx.ui.setWorkingMessage("Working...");
+    ctx.ui.setWorkingMessage("Waiting for response...");
 
     ctx.ui.setFooter(() => ({
       invalidate() {},
@@ -317,5 +321,34 @@ export default function (pi: ExtensionAPI) {
         return [];
       },
     }));
+  });
+
+  pi.on("before_agent_start", (_event, ctx) => {
+    if (!ctx.hasUI) return;
+    activeToolExecutions.clear();
+    ctx.ui.setWorkingMessage("Waiting for response...");
+  });
+
+  pi.on("message_update", (event, ctx) => {
+    if (!ctx.hasUI || event.message.role !== "assistant") return;
+    ctx.ui.setWorkingMessage("Streaming response...");
+  });
+
+  pi.on("tool_execution_start", (event, ctx) => {
+    if (!ctx.hasUI) return;
+    activeToolExecutions.add(event.toolCallId);
+    ctx.ui.setWorkingMessage("Running tools...");
+  });
+
+  pi.on("tool_execution_end", (event, ctx) => {
+    if (!ctx.hasUI) return;
+    activeToolExecutions.delete(event.toolCallId);
+    if (activeToolExecutions.size === 0) {
+      ctx.ui.setWorkingMessage("Waiting for response...");
+    }
+  });
+
+  pi.on("agent_end", (_event, _ctx) => {
+    activeToolExecutions.clear();
   });
 }

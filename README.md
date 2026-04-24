@@ -2,6 +2,8 @@
 
 Amp-inspired UI suite for [Pi](https://pi.dev): a dark theme, custom editor chrome, and compact tool display bundled as one installable package.
 
+![amp-gruvbox-dark-hard screenshot](screenshots/amp-gruvbox-dark-hard.png)
+
 ## What it includes
 
 - `themes/amp-gruvbox-dark-hard.json` — dark Amp-style Pi theme.
@@ -106,7 +108,7 @@ ctx.modelRegistry.isUsingOAuth(ctx.model)
 
 If no real cost exists and the model is not subscription-backed, the cost segment is hidden.
 
-## Package structure
+## Repository structure
 
 ```text
 amp-themes/
@@ -117,6 +119,8 @@ amp-themes/
     amp-user-message.ts
   themes/
     amp-gruvbox-dark-hard.json
+  screenshots/
+    amp-gruvbox-dark-hard.png
 ```
 
 ## Release checklist

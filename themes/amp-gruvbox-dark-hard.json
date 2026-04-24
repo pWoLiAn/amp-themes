@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/badlogic/pi-mono/main/packages/coding-agent/src/modes/interactive/theme/theme-schema.json",
   "name": "amp-gruvbox-dark-hard",
   "vars": {
-    "amp-bg": "#202222",
+    "amp-bg": "#151617",
     "amp-bg-deep": "#1b1d1d",
     "amp-surface": "#202222",
     "amp-surface-soft": "#292b2a",
@@ -75,7 +75,7 @@
     "bashMode": "amp-orange"
   },
   "export": {
-    "pageBg": "#202222",
+    "pageBg": "#151617",
     "cardBg": "#292b2a",
     "infoBg": "#252726"
   }
