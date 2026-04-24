@@ -18,7 +18,8 @@
     "CHANGELOG.md",
     "LICENSE",
     "extensions",
-    "themes"
+    "themes",
+    "skills"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -33,6 +34,9 @@
     ],
     "themes": [
       "./themes"
+    ],
+    "skills": [
+      "./skills"
     ]
   },
   "dependencies": {

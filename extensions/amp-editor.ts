@@ -215,13 +215,10 @@ class AmpEditor extends CustomEditor {
   private wrapPopupBlock(lines: string[], width: number): string[] {
     if (lines.length === 0) return [];
 
-    const indent = "    ";
-    const contentWidth = Math.max(1, width - visibleWidth(indent));
-
     return lines.map((line) => {
-      const clipped = truncateToWidth(line, contentWidth, "");
-      const padding = " ".repeat(Math.max(0, contentWidth - visibleWidth(clipped)));
-      return indent + clipped + padding;
+      const clipped = truncateToWidth(line, width, "");
+      const padding = " ".repeat(Math.max(0, width - visibleWidth(clipped)));
+      return clipped + padding;
     });
   }
 
