@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.6
+
+- Keep Amp editor thinking state stable after resumed sessions that lack a thinking-level entry.
+- Preserve working-message order across waiting, streaming, and tool execution events.
+- Avoid setting a custom working message while idle, and avoid restoring Pi's default message at agent end.
+- Use a GitHub-hosted README screenshot so npm can render it without packaging the image.
+- Simplify the README.
+
 ## 0.2.5
 
 - Replace the working indicator with Amp-style `~ → ≈ → ≋` animation.

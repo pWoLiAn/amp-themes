@@ -167,6 +167,7 @@ test("amp editor working message waits until assistant update before streaming",
   } as unknown as ExtensionContext;
 
   sessionStart({ type: "session_start", reason: "startup" }, ctx);
+  assert.deepEqual(workingMessages, []);
 
   const beforeAgentStart = handlers.get("before_agent_start");
   assert.ok(beforeAgentStart, "before_agent_start handler should be registered");
@@ -212,6 +213,45 @@ test("amp editor shows running tools while tool execution is active", () => {
   );
 
   assert.equal(workingMessages.at(-1), "Running tools...");
+});
+
+test("amp editor keeps working message ordered while tools are active", () => {
+  const { pi, handlers } = createPiStub(() => "medium");
+  const workingMessages: Array<string | undefined> = [];
+  const ctx = {
+    hasUI: true,
+    ui: {
+      setWorkingMessage(message?: string) {
+        workingMessages.push(message);
+      },
+    },
+  } as unknown as ExtensionContext;
+
+  ampEditorExtension(pi);
+
+  const messageUpdate = handlers.get("message_update");
+  const toolExecutionStart = handlers.get("tool_execution_start");
+  const toolExecutionEnd = handlers.get("tool_execution_end");
+  assert.ok(messageUpdate, "message_update handler should be registered");
+  assert.ok(toolExecutionStart, "tool_execution_start handler should be registered");
+  assert.ok(toolExecutionEnd, "tool_execution_end handler should be registered");
+
+  messageUpdate({ type: "message_update", message: { role: "assistant", content: [] } }, ctx);
+  assert.deepEqual(workingMessages, ["Streaming response..."]);
+
+  toolExecutionStart({ type: "tool_execution_start", toolCallId: "tool-1", toolName: "read", args: {} }, ctx);
+  assert.deepEqual(workingMessages, ["Streaming response...", "Running tools..."]);
+
+  messageUpdate({ type: "message_update", message: { role: "assistant", content: [] } }, ctx);
+  assert.deepEqual(workingMessages, ["Streaming response...", "Running tools..."]);
+
+  toolExecutionEnd({ type: "tool_execution_end", toolCallId: "tool-1", toolName: "read", result: {}, isError: false }, ctx);
+  assert.deepEqual(workingMessages, ["Streaming response...", "Running tools...", "Waiting for response..."]);
+
+  const agentEnd = handlers.get("agent_end");
+  assert.ok(agentEnd, "agent_end handler should be registered");
+  agentEnd({ type: "agent_end", messages: [] }, ctx);
+  assert.deepEqual(workingMessages, ["Streaming response...", "Running tools...", "Waiting for response..."]);
 });
 
 test("amp editor uses runtime thinking level after resume when session has no thinking entry", () => {

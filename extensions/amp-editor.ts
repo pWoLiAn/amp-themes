@@ -326,7 +326,6 @@ export default function (pi: ExtensionAPI) {
       frames: WORKING_FRAMES.map((frame) => ctx.ui.theme.fg("accent", frame)),
       intervalMs: 160,
     });
-    ctx.ui.setWorkingMessage("Waiting for response...");
 
     ctx.ui.setFooter(() => ({
       invalidate() {},
@@ -338,13 +337,14 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("before_agent_start", (_event, ctx) => {
     activeThinkingLevel = getSafeThinkingLevel(pi, ctx.sessionManager);
-    if (!ctx.hasUI) return;
     activeToolExecutions.clear();
+    if (!ctx.hasUI) return;
     ctx.ui.setWorkingMessage("Waiting for response...");
   });
 
   pi.on("message_update", (event, ctx) => {
     if (!ctx.hasUI || event.message.role !== "assistant") return;
+    if (activeToolExecutions.size > 0) return;
     ctx.ui.setWorkingMessage("Streaming response...");
   });
 
@@ -354,9 +354,14 @@ export default function (pi: ExtensionAPI) {
     ctx.ui.setWorkingMessage("Running tools...");
   });
 
-  pi.on("tool_execution_end", (event, ctx) => {
+  pi.on("tool_execution_update", (_event, ctx) => {
     if (!ctx.hasUI) return;
+    ctx.ui.setWorkingMessage("Running tools...");
+  });
+
+  pi.on("tool_execution_end", (event, ctx) => {
     activeToolExecutions.delete(event.toolCallId);
+    if (!ctx.hasUI) return;
     if (activeToolExecutions.size === 0) {
       ctx.ui.setWorkingMessage("Waiting for response...");
     }
