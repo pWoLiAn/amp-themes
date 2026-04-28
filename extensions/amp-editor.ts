@@ -163,6 +163,10 @@ function getSafeThinkingLevel(pi: ExtensionAPI, sessionManager: SessionManagerLi
   }
 }
 
+function hideBuiltInWorking(ctx: ExtensionContext): void {
+  (ctx.ui as typeof ctx.ui & { setWorkingVisible?: (visible: boolean) => void }).setWorkingVisible?.(false);
+}
+
 class AmpEditor extends CustomEditor {
   constructor(
     tui: any,
@@ -280,7 +284,8 @@ class AmpEditor extends CustomEditor {
     const working = this.getWorkingState();
     if (!working.active) return "";
 
-    return `${this.fg("accent", working.frame)} ${this.fg("muted", working.message)}`;
+    const cancelHint = `${this.fg("accent", "Esc")}${this.fg("muted", " to cancel")}`;
+    return `${this.fg("accent", working.frame)} ${this.fg("text", working.message)}  ${cancelHint}`;
   }
 
   private getGitChangesLabel(): string {
@@ -301,7 +306,8 @@ class AmpEditor extends CustomEditor {
   private wrapBody(line: string, innerWidth: number): string {
     const clipped = truncateToWidth(line, innerWidth, "");
     const padding = " ".repeat(Math.max(0, innerWidth - visibleWidth(clipped)));
-    return this.sideBorder() + clipped + padding + this.sideBorder();
+    const content = clipped ? this.fg("text", clipped) : clipped;
+    return this.sideBorder() + content + padding + this.sideBorder();
   }
 
   private wrapPopupBlock(lines: string[], width: number): string[] {
@@ -447,7 +453,7 @@ export default function (pi: ExtensionAPI) {
       }), openCommandPalette);
     });
 
-    (ctx.ui as typeof ctx.ui & { setWorkingVisible?: (visible: boolean) => void }).setWorkingVisible?.(false);
+    hideBuiltInWorking(ctx);
 
     ctx.ui.setFooter(() => ({
       invalidate() {},
@@ -464,7 +470,13 @@ export default function (pi: ExtensionAPI) {
     workingFrameIndex = 0;
     startWorkingTimer();
     if (!ctx.hasUI) return;
+    hideBuiltInWorking(ctx);
     setWorkingMessage("Waiting for response...", ctx);
+  });
+
+  pi.on("agent_start", (_event, ctx) => {
+    if (!ctx.hasUI) return;
+    hideBuiltInWorking(ctx);
   });
 
   pi.on("message_update", (event, ctx) => {

@@ -44,6 +44,20 @@ function createThemeStub(): ThemeStub {
   };
 }
 
+function createTaggedThemeStub(): ThemeStub {
+  return {
+    borderColor(text: string) {
+      return text;
+    },
+    fg(color: string, text: string) {
+      return `[${color}]${text}`;
+    },
+    italic(text: string) {
+      return text;
+    },
+  };
+}
+
 function createSessionManager(thinkingLevel = "medium") {
   const entries = [
     {
@@ -246,6 +260,45 @@ test("amp editor shows running tools while tool execution is active", () => {
   expect(workingMessages.at(-1)).toBe("Running tools...");
 });
 
+test("amp editor hides Pi's built-in working row during agent start", () => {
+  const { pi, handlers } = createPiStub(() => "medium");
+  const visibility: boolean[] = [];
+  const ctx = {
+    hasUI: true,
+    cwd: "/tmp",
+    model: {
+      id: "claude-sonnet-4-20250514",
+      contextWindow: 200000,
+      reasoning: true,
+    },
+    modelRegistry: { isUsingOAuth: () => false },
+    sessionManager: createSessionManager(),
+    getContextUsage: () => ({ percent: 12, contextWindow: 200000 }),
+    ui: {
+      theme: createThemeStub(),
+      setEditorComponent() {},
+      setWorkingIndicator() {},
+      setWorkingMessage() {},
+      setWorkingVisible(visible: boolean) {
+        visibility.push(visible);
+      },
+      setFooter() {},
+    },
+  } as unknown as ExtensionContext;
+
+  ampEditorExtension(pi);
+
+  const sessionStart = expectDefined(handlers.get("session_start"), "session_start handler should be registered");
+  const beforeAgentStart = expectDefined(handlers.get("before_agent_start"), "before_agent_start handler should be registered");
+  const agentStart = expectDefined(handlers.get("agent_start"), "agent_start handler should be registered");
+
+  sessionStart({ type: "session_start", reason: "startup" }, ctx);
+  beforeAgentStart({ type: "before_agent_start" }, ctx);
+  agentStart({ type: "agent_start" }, ctx);
+
+  expect(visibility).toEqual([false, false, false]);
+});
+
 test("amp editor keeps working message ordered while tools are active", () => {
   const { pi, handlers } = createPiStub(() => "medium");
   const workingMessages: Array<string | undefined> = [];
@@ -279,6 +332,99 @@ test("amp editor keeps working message ordered while tools are active", () => {
   const agentEnd = expectDefined(handlers.get("agent_end"), "agent_end handler should be registered");
   agentEnd({ type: "agent_end", messages: [] }, ctx);
   expect(workingMessages).toEqual(["Streaming response...", "Running tools...", "Waiting for response..."]);
+});
+
+test("amp editor renders working status with an Esc cancel hint", () => {
+  const { pi, handlers } = createPiStub(() => "medium");
+
+  ampEditorExtension(pi);
+
+  let editorFactory:
+    | ((tui: unknown, theme: ThemeStub, keybindings: { matches(): boolean }) => { render(width: number): string[] })
+    | undefined;
+
+  const sessionStart = expectDefined(handlers.get("session_start"), "session_start handler should be registered");
+  const ctx = {
+    hasUI: true,
+    cwd: "/tmp",
+    model: {
+      id: "claude-sonnet-4-20250514",
+      contextWindow: 200000,
+      reasoning: true,
+    },
+    modelRegistry: { isUsingOAuth: () => false },
+    sessionManager: createSessionManager(),
+    getContextUsage: () => ({ percent: 12, contextWindow: 200000 }),
+    ui: {
+      theme: createTaggedThemeStub(),
+      setEditorComponent(factory: typeof editorFactory) {
+        editorFactory = factory;
+      },
+      setWorkingIndicator() {},
+      setWorkingMessage() {},
+      setWorkingVisible() {},
+      setFooter() {},
+    },
+  } as unknown as ExtensionContext;
+
+  sessionStart({ type: "session_start", reason: "startup" }, ctx);
+  const beforeAgentStart = expectDefined(handlers.get("before_agent_start"), "before_agent_start handler should be registered");
+  beforeAgentStart({ type: "before_agent_start" }, ctx);
+
+  const createEditor = expectDefined(editorFactory, "editor factory should be registered");
+  const editor = createEditor(
+    { requestRender() {}, terminal: { rows: 24 } },
+    createTaggedThemeStub(),
+    { matches: () => false },
+  );
+
+  expect(editor.render(200).join("\n")).toContain("[accent]Esc[muted] to cancel");
+});
+
+test("amp editor applies the theme text color to typed input", () => {
+  const { pi, handlers } = createPiStub(() => "medium");
+
+  ampEditorExtension(pi);
+
+  let editorFactory:
+    | ((tui: unknown, theme: ThemeStub, keybindings: { matches(): boolean }) => { render(width: number): string[]; setText(text: string): void })
+    | undefined;
+
+  const sessionStart = expectDefined(handlers.get("session_start"), "session_start handler should be registered");
+  sessionStart(
+    { type: "session_start", reason: "startup" },
+    {
+      hasUI: true,
+      cwd: process.cwd(),
+      model: {
+        id: "claude-sonnet-4-20250514",
+        contextWindow: 200000,
+        reasoning: true,
+      },
+      modelRegistry: { isUsingOAuth: () => false },
+      sessionManager: createSessionManager(),
+      getContextUsage: () => ({ percent: 12, contextWindow: 200000 }),
+      ui: {
+        theme: createTaggedThemeStub(),
+        setEditorComponent(factory: typeof editorFactory) {
+          editorFactory = factory;
+        },
+        setWorkingIndicator() {},
+        setWorkingMessage() {},
+        setFooter() {},
+      },
+    } as unknown as ExtensionContext,
+  );
+
+  const createEditor = expectDefined(editorFactory, "editor factory should be registered");
+  const editor = createEditor(
+    { requestRender() {}, terminal: { rows: 24 } },
+    createTaggedThemeStub(),
+    { matches: () => false },
+  );
+  editor.setText("为啥老是报错？");
+
+  expect(editor.render(100).join("\n")).toContain("[text] 为啥老是报错？");
 });
 
 test("amp editor uses latest context and cost after reload", () => {

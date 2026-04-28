@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.14
+
+- Rework `amp-gruvbox-dark-hard` to use the canonical Gruvbox dark hard palette.
+- Color editor input text through the theme `text` token for consistent theme-specific editor rendering.
+- Keep Pi's built-in working loader row hidden during agent starts while showing Amp's own `Esc to cancel` status hint.
+
 ## 0.2.13
 
 - Update README to describe the latest editor working-status and color-sync behavior.
