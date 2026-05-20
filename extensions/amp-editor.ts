@@ -469,11 +469,6 @@ class AmpEditor extends CustomEditor {
     const contextWindow = usage?.contextWindow ?? this.ctx.model?.contextWindow ?? null;
     const parts = [` ${pct} of ${formatCount(contextWindow)}`];
 
-    const cost = getSessionCost(this.ctx);
-    if (cost.hasCost || cost.usingSubscription) {
-      parts.push(`${formatCost(cost.total)}${cost.usingSubscription ? " (sub)" : ""}`);
-    }
-
     const statuses = this.getFooterStatuses();
     if (statuses.length > 0) {
       parts.push(statuses.join(this.fg("dim", " · ")));
