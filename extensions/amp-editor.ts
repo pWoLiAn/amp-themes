@@ -516,8 +516,13 @@ class AmpEditor extends CustomEditor {
     const working = this.getWorkingState();
     if (!working.active) return "";
 
-    const cancelHint = `${this.fg("accent", "Esc")}${this.fg("muted", " to cancel")}`;
-    return `${this.fg("accent", working.frame)} ${this.fg("text", working.message)}  ${cancelHint}`;
+    const sep = this.fg("dim", " · ");
+    const hints = [
+      `${this.fg("accent", "Esc")} ${this.fg("dim", "cancel")}`,
+      `${this.fg("accent", "Enter")} ${this.fg("dim", "steer")}`,
+      `${this.fg("accent", "Alt+Enter")} ${this.fg("dim", "queue")}`,
+    ].join(sep);
+    return `${this.fg("dim", working.frame)} ${this.fg("muted", working.message)}  ${hints}`;
   }
 
   private getGitChangesLabel(): string {
