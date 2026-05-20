@@ -45,6 +45,7 @@ type WorkingState = {
   active: boolean;
   message: string;
   frame: string;
+  emoji: string;
 };
 
 type GitInfo = {
@@ -545,7 +546,7 @@ class AmpEditor extends CustomEditor {
       `${this.fg("accent", "Enter")} ${this.fg("dim", "steer")}`,
       `${this.fg("accent", "Alt+Enter")} ${this.fg("dim", "queue")}`,
     ].join(sep);
-    return `${this.fg("muted", workingEmoji)} ${this.fg("muted", working.message)}${this.fg("dim", working.frame)}  ${hints}`;
+    return `${this.fg("muted", working.emoji)} ${this.fg("muted", working.message)}${this.fg("dim", working.frame)}  ${hints}`;
   }
 
   private getGitChangesLabel(): string {
@@ -747,6 +748,7 @@ export default function (pi: ExtensionAPI) {
         active: isWorking,
         message: workingMessage,
         frame: WORKING_FRAMES[workingFrameIndex] ?? WORKING_FRAMES[0],
+        emoji: workingEmoji,
       }), openCommandPalette, getFooterStatuses);
     });
 
