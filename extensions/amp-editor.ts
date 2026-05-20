@@ -20,21 +20,21 @@ const WORKING_EMOJIS = [
   "( ͡~ ͜ʖ ͡°)",
 ];
 const WORKING_MESSAGES = [
-  "Consulting the oracle",
-  "Summoning tokens",
-  "Wrangling neurons",
-  "Shaking the magic 8-ball",
-  "Asking nicely",
-  "Bribing the transformer",
-  "Warming up the hamsters",
-  "Percolating thoughts",
-  "Downloading more RAM",
-  "Consulting the ancient scrolls",
-  "Sacrificing tokens to the void",
-  "Poking the language model",
-  "Brewing a fresh response",
-  "Loading galaxy brain",
-  "Tickling the attention heads",
+  "consulting the oracle",
+  "summoning tokens",
+  "wrangling neurons",
+  "shaking the magic 8-ball",
+  "asking nicely",
+  "bribing the transformer",
+  "warming up the hamsters",
+  "percolating thoughts",
+  "downloading more ram",
+  "consulting the ancient scrolls",
+  "sacrificing tokens to the void",
+  "poking the language model",
+  "brewing a fresh response",
+  "loading galaxy brain",
+  "tickling the attention heads",
 ];
 const MAX_AT_MENTION_ITEMS = 15;
 const MAX_AT_PREVIEW_BYTES = 16 * 1024;
@@ -549,9 +549,9 @@ class AmpEditor extends CustomEditor {
     if (!working.active) return "";
     const sep = this.fg("dim", " · ");
     return [
-      `${this.fg("accent", "Esc")} ${this.fg("dim", "cancel")}`,
-      `${this.fg("accent", "Enter")} ${this.fg("dim", "steer")}`,
-      `${this.fg("accent", "Alt+Enter")} ${this.fg("dim", "queue")}`,
+      `${this.fg("accent", "esc")} ${this.fg("dim", "cancel")}`,
+      `${this.fg("accent", "enter")} ${this.fg("dim", "steer")}`,
+      `${this.fg("accent", "alt+enter")} ${this.fg("dim", "queue")}`,
     ].join(sep);
   }
 
