@@ -452,13 +452,14 @@ class AmpEditor extends CustomEditor {
     const rightTop = this.getModelLabel(Math.max(8, Math.floor(innerWidth * 0.48)));
     const cwdLabel = this.getCwdLabel();
     const workingLabel = this.getWorkingLabel();
+    const workingHints = this.getWorkingHints();
     const gitChangesLabel = this.getGitChangesLabel();
 
     return [
       this.borderWithLabels(width, leftTop, rightTop),
       ...body.map((line) => this.wrapBody(line, innerWidth)),
       this.borderWithRightLabel(width, cwdLabel),
-      ...this.statusRows(width, workingLabel, gitChangesLabel),
+      ...this.statusRows(width, workingLabel, workingHints || gitChangesLabel),
       ...this.wrapPopupBlock(popupLines, width),
     ];
   }
@@ -515,14 +516,18 @@ class AmpEditor extends CustomEditor {
   private getWorkingLabel(): string {
     const working = this.getWorkingState();
     if (!working.active) return "";
+    return `${this.fg("dim", working.frame)} ${this.fg("muted", working.message)}`;
+  }
 
+  private getWorkingHints(): string {
+    const working = this.getWorkingState();
+    if (!working.active) return "";
     const sep = this.fg("dim", " · ");
-    const hints = [
+    return [
       `${this.fg("accent", "Esc")} ${this.fg("dim", "cancel")}`,
       `${this.fg("accent", "Enter")} ${this.fg("dim", "steer")}`,
       `${this.fg("accent", "Alt+Enter")} ${this.fg("dim", "queue")}`,
     ].join(sep);
-    return `${this.fg("dim", working.frame)} ${this.fg("muted", working.message)}  ${hints}`;
   }
 
   private getGitChangesLabel(): string {
