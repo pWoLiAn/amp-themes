@@ -237,12 +237,7 @@ function getSkillPreviewPath(name: string, cwd: string): string | undefined {
 
 function getSlashCommandPreview(item: CommandPaletteItem, cwd: string): string[] {
   if (item.source !== "skill") {
-    return [
-      `/${item.name}`,
-      item.source ? `source: ${item.source}` : "",
-      "",
-      item.previewText ?? "No description",
-    ].filter(Boolean);
+    return [];
   }
 
   return [item.previewText ?? item.description ?? "No description"];
