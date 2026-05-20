@@ -593,7 +593,7 @@ class AmpEditor extends CustomEditor {
     const gap = " ".repeat(Math.max(1, contentWidth - visibleWidth(left) - visibleWidth(right)));
     const leftPadding = " ".repeat(Math.min(STATUS_LEFT_INSET, Math.max(0, width - contentWidth)));
     const rightPadding = " ".repeat(Math.min(STATUS_RIGHT_INSET, Math.max(0, width - contentWidth - visibleWidth(leftPadding))));
-    return [`${leftPadding}${left}${gap}${right}${rightPadding}`];
+    return [`${leftPadding}${left}${gap}${right}${rightPadding}`, ""];
   }
 
   private borderWithLabels(width: number, leftLabel: string, rightLabel: string): string {
