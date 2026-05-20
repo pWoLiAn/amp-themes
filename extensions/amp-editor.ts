@@ -11,7 +11,31 @@ const MIN_BODY_LINES = 2;
 const GIT_CACHE_MS = 2000;
 const STATUS_LEFT_INSET = 1;
 const STATUS_RIGHT_INSET = 1;
-const WORKING_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const WORKING_FRAMES = ["   ", ".  ", ".. ", "..."];
+const WORKING_EMOJIS = [
+  "( ͡° ͜ʖ ͡°)",
+  "(╯°□°)╯",
+  "(´・ω・`)",
+  "ᕕ( ͡° ͜ʖ ͡°)ᕗ",
+  "( ͡~ ͜ʖ ͡°)",
+];
+const WORKING_MESSAGES = [
+  "Consulting the oracle",
+  "Summoning tokens",
+  "Wrangling neurons",
+  "Shaking the magic 8-ball",
+  "Asking nicely",
+  "Bribing the transformer",
+  "Warming up the hamsters",
+  "Percolating thoughts",
+  "Downloading more RAM",
+  "Consulting the ancient scrolls",
+  "Sacrificing tokens to the void",
+  "Poking the language model",
+  "Brewing a fresh response",
+  "Loading galaxy brain",
+  "Tickling the attention heads",
+];
 const MAX_AT_MENTION_ITEMS = 15;
 const MAX_AT_PREVIEW_BYTES = 16 * 1024;
 const MAX_AT_PREVIEW_LINES = 10;
@@ -516,7 +540,7 @@ class AmpEditor extends CustomEditor {
   private getWorkingLabel(): string {
     const working = this.getWorkingState();
     if (!working.active) return "";
-    return `${this.fg("dim", working.frame)} ${this.fg("muted", working.message)}`;
+    return `${this.fg("muted", workingEmoji)} ${this.fg("muted", working.message)}${this.fg("dim", working.frame)}`;
   }
 
   private getWorkingHints(): string {
@@ -638,7 +662,7 @@ export default function (pi: ExtensionAPI) {
   let activeFooterData: { getExtensionStatuses(): ReadonlyMap<string, string> } | undefined;
   let commandPaletteOpen = false;
   let isWorking = false;
-  let workingMessage = "Waiting for response...";
+  let workingMessage = "";
   let workingFrameIndex = 0;
   let workingTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -665,7 +689,13 @@ export default function (pi: ExtensionAPI) {
     workingTimer = setInterval(() => {
       workingFrameIndex = (workingFrameIndex + 1) % WORKING_FRAMES.length;
       requestRender();
-    }, 80);
+    }, 300);
+  };
+
+  let workingEmoji = "";
+  const pickWorkingMessage = (): string => {
+    workingEmoji = WORKING_EMOJIS[Math.floor(Math.random() * WORKING_EMOJIS.length)];
+    return WORKING_MESSAGES[Math.floor(Math.random() * WORKING_MESSAGES.length)];
   };
 
   const setWorkingMessage = (message: string, ctx?: ExtensionContext) => {
@@ -747,7 +777,7 @@ export default function (pi: ExtensionAPI) {
     startWorkingTimer();
     if (!ctx.hasUI) return;
     hideBuiltInWorking(ctx);
-    setWorkingMessage("Waiting for response...", ctx);
+    setWorkingMessage(pickWorkingMessage(), ctx);
   });
 
   pi.on("agent_start", (_event, ctx) => {
@@ -758,25 +788,25 @@ export default function (pi: ExtensionAPI) {
   pi.on("message_update", (event, ctx) => {
     if (!ctx.hasUI || event.message.role !== "assistant") return;
     if (activeToolExecutions.size > 0) return;
-    setWorkingMessage("Streaming response...", ctx);
+    setWorkingMessage(pickWorkingMessage(), ctx);
   });
 
   pi.on("tool_execution_start", (event, ctx) => {
     activeToolExecutions.add(event.toolCallId);
     if (!ctx.hasUI) return;
-    setWorkingMessage("Running tools...", ctx);
+    setWorkingMessage(pickWorkingMessage(), ctx);
   });
 
   pi.on("tool_execution_update", (_event, ctx) => {
     if (!ctx.hasUI) return;
-    setWorkingMessage("Running tools...", ctx);
+    setWorkingMessage(pickWorkingMessage(), ctx);
   });
 
   pi.on("tool_execution_end", (event, ctx) => {
     activeToolExecutions.delete(event.toolCallId);
     if (!ctx.hasUI) return;
     if (activeToolExecutions.size === 0) {
-      setWorkingMessage("Waiting for response...", ctx);
+      setWorkingMessage(pickWorkingMessage(), ctx);
     }
   });
 
