@@ -1,15 +1,21 @@
 import { CustomEditor, type ExtensionAPI, type ExtensionContext, type ThemeColor } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { BUILTIN_COMMAND_PALETTE_ITEMS, CommandPaletteOverlay, type CommandPaletteItem, type CommandPaletteResult, stripAnsi } from "./amp-command-palette.js";
-import { execFileSync } from "node:child_process";
+import { BUILTIN_COMMAND_PALETTE_ITEMS, CommandPaletteOverlay, type CommandPaletteItem, type CommandPaletteItemsProvider, type CommandPalettePreviewProvider, type CommandPaletteResult, stripAnsi } from "./amp-command-palette.js";
+import { execFileSync, spawn } from "node:child_process";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { open, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
-import { relative } from "node:path";
+import { join, relative, resolve } from "node:path";
 
 const MIN_BODY_LINES = 2;
 const GIT_CACHE_MS = 2000;
 const STATUS_LEFT_INSET = 1;
 const STATUS_RIGHT_INSET = 1;
-const WORKING_FRAMES = ["~", "≈", "≋"];
+const WORKING_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const MAX_AT_MENTION_ITEMS = 15;
+const MAX_AT_PREVIEW_BYTES = 16 * 1024;
+const MAX_AT_PREVIEW_LINES = 10;
+const MAX_SKILL_PREVIEW_LINES = 10;
 
 type WorkingState = {
   active: boolean;
@@ -44,6 +50,208 @@ function runGit(cwd: string, args: string[]): string {
   } catch {
     return "";
   }
+}
+
+function getFdCommand(): string {
+  const agentFd = `${homedir()}/.pi/agent/bin/fd`;
+  return existsSync(agentFd) ? agentFd : "fd";
+}
+
+function toDisplayPath(path: string): string {
+  return path.replace(/\\/g, "/");
+}
+
+function expandHomePath(path: string): string {
+  if (path === "~") return homedir();
+  if (path.startsWith("~/")) return join(homedir(), path.slice(2));
+  return path;
+}
+
+function getScopedAtMentionQuery(cwd: string, query: string): { baseDir: string; displayBase: string; query: string } | null {
+  const normalizedQuery = toDisplayPath(query.trim());
+  if (normalizedQuery === "~") return { baseDir: homedir(), displayBase: "~/", query: "" };
+
+  const slashIndex = normalizedQuery.lastIndexOf("/");
+  if (slashIndex === -1) return null;
+
+  const displayBase = normalizedQuery.slice(0, slashIndex + 1);
+  const tailQuery = normalizedQuery.slice(slashIndex + 1);
+  const baseDir = displayBase.startsWith("~/")
+    ? expandHomePath(displayBase)
+    : displayBase.startsWith("/")
+      ? displayBase
+      : resolve(cwd, displayBase);
+
+  try {
+    if (!statSync(baseDir).isDirectory()) return null;
+  } catch {
+    return null;
+  }
+
+  return { baseDir, displayBase, query: tailQuery };
+}
+
+function scopedPathForDisplay(displayBase: string, relativePath: string): string {
+  const normalized = toDisplayPath(relativePath);
+  if (displayBase === "/") return `/${normalized}`;
+  return `${toDisplayPath(displayBase)}${normalized}`;
+}
+
+async function getAtMentionItems(cwd: string, query = "", signal: AbortSignal): Promise<CommandPaletteItem[]> {
+  const scoped = getScopedAtMentionQuery(cwd, query);
+  const baseDir = scoped?.baseDir ?? cwd;
+  const fdQuery = scoped?.query ?? query.trim();
+  const args = [
+    "--base-directory",
+    baseDir,
+    "--max-results",
+    String(MAX_AT_MENTION_ITEMS),
+    "--type",
+    "f",
+    "--type",
+    "d",
+    "--follow",
+    "--hidden",
+    "--exclude",
+    ".git",
+    "--exclude",
+    ".git/*",
+    "--exclude",
+    ".git/**",
+  ];
+  if (fdQuery) args.push(fdQuery);
+
+  return await new Promise((resolveItems) => {
+    if (signal.aborted) {
+      resolveItems([]);
+      return;
+    }
+
+    const child = spawn(getFdCommand(), args, {
+      cwd: baseDir,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    let stdout = "";
+    let settled = false;
+
+    const finish = (items: CommandPaletteItem[]) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener("abort", onAbort);
+      resolveItems(items);
+    };
+
+    const onAbort = () => {
+      if (child.exitCode === null) child.kill("SIGKILL");
+      finish([]);
+    };
+
+    signal.addEventListener("abort", onAbort, { once: true });
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.on("error", () => finish([]));
+    child.on("close", (code) => {
+      if (signal.aborted || code !== 0 || !stdout) {
+        finish([]);
+        return;
+      }
+
+      const seen = new Set<string>();
+      const items = stdout
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .filter((line) => {
+          if (line === ".git" || line.startsWith(".git/") || line.includes("/.git/")) return false;
+          if (seen.has(line)) return false;
+          seen.add(line);
+          return true;
+        })
+        .map((line) => {
+          const pathWithoutSlash = line.endsWith("/") ? line.slice(0, -1) : line;
+          const displayPath = scoped ? scopedPathForDisplay(scoped.displayBase, pathWithoutSlash) : pathWithoutSlash;
+          const absolutePath = resolve(baseDir, pathWithoutSlash);
+          const homePath = absolutePath.startsWith(`${homedir()}/`) ? `~/${relative(homedir(), absolutePath)}` : absolutePath;
+          const source = line.endsWith("/") ? "dir" : "file";
+          const completionPath = source === "dir" ? `${displayPath}/` : displayPath;
+          return {
+            name: completionPath,
+            description: absolutePath,
+            source,
+            searchText: `${completionPath} ${absolutePath} ${homePath}`,
+            insertText: completionPath,
+          };
+        });
+      finish(items);
+    });
+  });
+}
+
+async function getAtMentionPreview(item: CommandPaletteItem, signal: AbortSignal): Promise<string[]> {
+  const target = item.description;
+  if (!target) return [];
+
+  try {
+    const stat = statSync(target);
+    if (stat.isDirectory()) {
+      const entries = await readdir(target, { withFileTypes: true });
+      if (signal.aborted) return [];
+      const rows = entries
+        .sort((a, b) => Number(b.isDirectory()) - Number(a.isDirectory()) || a.name.localeCompare(b.name))
+        .slice(0, MAX_AT_PREVIEW_LINES)
+        .map((entry) => `${entry.isDirectory() ? "📁" : "  "} ${entry.name}${entry.isDirectory() ? "/" : ""}`);
+      return [target, "", ...rows];
+    }
+
+    if (!stat.isFile()) return [target, "", "Not a regular file"];
+    const handle = await open(target, "r");
+    try {
+      const buffer = Buffer.alloc(Math.min(MAX_AT_PREVIEW_BYTES, stat.size));
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+      if (signal.aborted) return [];
+      if (buffer.subarray(0, bytesRead).includes(0)) return [target, "", "Binary file"];
+      const text = buffer.toString("utf8", 0, bytesRead).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      const lines = text.split("\n").slice(0, MAX_AT_PREVIEW_LINES).map((line) => line.replace(/\t/g, "    "));
+      if (stat.size > bytesRead || text.split("\n").length > MAX_AT_PREVIEW_LINES) lines.push("…");
+      return [target, "", ...lines];
+    } finally {
+      await handle.close();
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return [target, "", `Unable to preview: ${message}`];
+  }
+}
+
+function getSkillPreviewPath(name: string, cwd: string): string | undefined {
+  const candidates = [
+    join(homedir(), ".copilot", "skills", name, "SKILL.md"),
+    join(homedir(), ".pi", "agent", "skills", name, "SKILL.md"),
+    join(homedir(), ".agents", "skills", name, "SKILL.md"),
+    join(cwd, ".pi", "skills", name, "SKILL.md"),
+  ];
+  return candidates.find((path) => existsSync(path));
+}
+
+function getSlashCommandPreview(item: CommandPaletteItem, cwd: string): string[] {
+  if (item.source !== "skill") {
+    return [
+      `/${item.name}`,
+      item.source ? `source: ${item.source}` : "",
+      "",
+      item.previewText ?? "No description",
+    ].filter(Boolean);
+  }
+
+  return [item.previewText ?? item.description ?? "No description"];
+}
+
+function formatAtMention(path: string): string {
+  const normalized = path.replace(/\\/g, "/");
+  if (/\s/.test(normalized)) return `@"${normalized.replace(/"/g, '\\"')}" `;
+  return `@${normalized} `;
 }
 
 function getGitInfo(cwd: string): GitInfo {
@@ -110,6 +318,16 @@ function isEditorRule(line: string): boolean {
   return plain.includes("─") && [...plain].every((char) => "─↑↓ 0123456789more".includes(char));
 }
 
+function sanitizeFooterStatus(text: string): string {
+  return text
+    .replace(/[\r\n\t]/g, " ")
+    .replace(/ +/g, " ")
+    .replace(/^(?:gh):/, "🐙:")
+    .replace(/^(?:mcp):/, "🔌:")
+    .replace(/^(?:Tavily|web||):/, "🔍:")
+    .trim();
+}
+
 function splitEditorRender(lines: string[]): { editorLines: string[]; popupLines: string[] } {
   const withoutTop = lines.slice(1);
   const bottomRuleIndex = withoutTop.findIndex(isEditorRule);
@@ -149,6 +367,14 @@ function hideBuiltInWorking(ctx: ExtensionContext): void {
   (ctx.ui as typeof ctx.ui & { setWorkingVisible?: (visible: boolean) => void }).setWorkingVisible?.(false);
 }
 
+class HiddenFooter {
+  invalidate(): void {}
+  dispose(): void {}
+  render(): string[] {
+    return [];
+  }
+}
+
 class AmpEditor extends CustomEditor {
   constructor(
     tui: any,
@@ -157,7 +383,8 @@ class AmpEditor extends CustomEditor {
     private readonly getCtx: () => ExtensionContext,
     private readonly getThinkingLevel: () => string,
     private readonly getWorkingState: () => WorkingState,
-    private readonly openCommandPalette: (initialQuery: string | undefined, onSelect: (result: CommandPaletteResult) => void) => void,
+    private readonly openCommandPalette: (initialQuery: string | undefined, onSelect: (result: CommandPaletteResult) => void, items?: CommandPaletteItem[] | CommandPaletteItemsProvider, preview?: CommandPalettePreviewProvider, maxRows?: number, noAutoSelect?: boolean) => void,
+    private readonly getFooterStatuses: () => string[],
   ) {
     super(tui, theme, keybindings, { paddingX: 1 });
   }
@@ -174,11 +401,28 @@ class AmpEditor extends CustomEditor {
         } else {
           this.submitCommand(result.command);
         }
-      });
+      }, undefined, (item) => getSlashCommandPreview(item, this.ctx.cwd));
+      return;
+    }
+
+    if (data === "@" && this.isAtMentionPaletteAllowed()) {
+      this.openCommandPalette(undefined, (result) => {
+        const query = result.query?.trim() ?? "";
+        const path = query.startsWith("/") || query.startsWith("~/") ? result.insertText ?? result.command : result.command;
+        this.insertTextAtCursor(formatAtMention(path));
+        this.tui.requestRender();
+      }, (query, signal) => getAtMentionItems(this.ctx.cwd, query, signal), getAtMentionPreview, MAX_AT_MENTION_ITEMS, true);
       return;
     }
 
     super.handleInput(data);
+  }
+
+  private isAtMentionPaletteAllowed(): boolean {
+    const cursor = this.getCursor();
+    const line = this.getLines()[cursor.line] ?? "";
+    const beforeCursor = line.slice(0, cursor.col);
+    return beforeCursor.length === 0 || /\s$/.test(beforeCursor);
   }
 
   private insertCommand(command: string): void {
@@ -235,6 +479,11 @@ class AmpEditor extends CustomEditor {
       parts.push(`${formatCost(cost.total)}${cost.usingSubscription ? " (sub)" : ""}`);
     }
 
+    const statuses = this.getFooterStatuses();
+    if (statuses.length > 0) {
+      parts.push(statuses.join(this.fg("dim", " · ")));
+    }
+
     return `${parts.join(" · ")} `;
   }
 
@@ -268,7 +517,9 @@ class AmpEditor extends CustomEditor {
 
   private getCwdLabel(): string {
     const git = getGitInfo(this.ctx.cwd);
-    return ` ${compactPath(this.ctx.cwd)}${git.branch ? ` (${git.branch})` : ""} `;
+    const sessionName = this.ctx.sessionManager.getSessionName?.();
+    const cwd = `${compactPath(this.ctx.cwd)}${git.branch ? ` (${git.branch})` : ""}`;
+    return ` ${sessionName ? `${sessionName} · ` : ""}${cwd} `;
   }
 
   private getWorkingLabel(): string {
@@ -300,6 +551,7 @@ class AmpEditor extends CustomEditor {
     const content = clipped ? this.fg("text", clipped) : clipped;
     return this.sideBorder() + content + padding + this.sideBorder();
   }
+
 
   private wrapPopupBlock(lines: string[], width: number): string[] {
     if (lines.length === 0) return [];
@@ -348,14 +600,27 @@ class AmpEditor extends CustomEditor {
   }
 }
 
+function formatSourcePath(path: string | undefined): string | undefined {
+  if (!path) return undefined;
+  const home = homedir();
+  if (path === home) return "~";
+  if (path.startsWith(`${home}/`)) return `~/${relative(home, path)}`;
+  return path;
+}
+
 function getCommandPaletteItems(pi: ExtensionAPI): CommandPaletteItem[] {
   const items = [
     ...BUILTIN_COMMAND_PALETTE_ITEMS,
-    ...pi.getCommands().map((command) => ({
-      name: command.name,
-      description: command.description,
-      source: command.source,
-    })),
+    ...pi.getCommands().map((command) => {
+      const sourcePath = formatSourcePath(command.sourceInfo?.path);
+      return {
+        name: command.name,
+        description: sourcePath ?? command.description,
+        source: command.source,
+        searchText: undefined,
+        previewText: command.description,
+      };
+    }),
   ];
   const seen = new Set<string>();
   return items.filter((item) => {
@@ -370,6 +635,7 @@ export default function (pi: ExtensionAPI) {
   let activeThinkingLevel = "off";
   let activeCtx: ExtensionContext | undefined;
   let activeTui: { requestRender(): void } | undefined;
+  let activeFooterData: { getExtensionStatuses(): ReadonlyMap<string, string> } | undefined;
   let commandPaletteOpen = false;
   let isWorking = false;
   let workingMessage = "Waiting for response...";
@@ -377,6 +643,16 @@ export default function (pi: ExtensionAPI) {
   let workingTimer: ReturnType<typeof setInterval> | undefined;
 
   const requestRender = () => activeTui?.requestRender();
+  const footerStatusOrder = new Map([
+    ["copilot-usage", 0],
+    ["mcp", 1],
+    ["tavily-usage", 2],
+  ]);
+
+  const getFooterStatuses = () => Array.from(activeFooterData?.getExtensionStatuses().entries() ?? [])
+    .sort(([a], [b]) => (footerStatusOrder.get(a) ?? 100) - (footerStatusOrder.get(b) ?? 100) || a.localeCompare(b))
+    .map(([, text]) => sanitizeFooterStatus(text))
+    .filter(Boolean);
 
   const stopWorkingTimer = () => {
     if (!workingTimer) return;
@@ -389,7 +665,7 @@ export default function (pi: ExtensionAPI) {
     workingTimer = setInterval(() => {
       workingFrameIndex = (workingFrameIndex + 1) % WORKING_FRAMES.length;
       requestRender();
-    }, 160);
+    }, 80);
   };
 
   const setWorkingMessage = (message: string, ctx?: ExtensionContext) => {
@@ -398,19 +674,23 @@ export default function (pi: ExtensionAPI) {
     requestRender();
   };
 
-  const openCommandPalette = (initialQuery = "", onSelect: (result: CommandPaletteResult) => void) => {
+  const openCommandPalette = (initialQuery = "", onSelect: (result: CommandPaletteResult) => void, items?: CommandPaletteItem[] | CommandPaletteItemsProvider, preview?: CommandPalettePreviewProvider, maxRows?: number, noAutoSelect = false) => {
     const ctx = activeCtx;
     if (!ctx?.hasUI || commandPaletteOpen) return;
 
     commandPaletteOpen = true;
     void ctx.ui.custom<CommandPaletteResult | null>(
       (tui, theme, keybindings, done) => new CommandPaletteOverlay(
-        getCommandPaletteItems(pi),
+        typeof items === "function" ? [] : items ?? getCommandPaletteItems(pi),
         initialQuery,
         tui,
         theme,
         keybindings,
         done,
+        typeof items === "function" ? items : undefined,
+        preview,
+        maxRows,
+        noAutoSelect,
       ),
       {
         overlay: true,
@@ -443,17 +723,15 @@ export default function (pi: ExtensionAPI) {
         active: isWorking,
         message: workingMessage,
         frame: WORKING_FRAMES[workingFrameIndex] ?? WORKING_FRAMES[0],
-      }), openCommandPalette);
+      }), openCommandPalette, getFooterStatuses);
     });
 
     hideBuiltInWorking(ctx);
 
-    ctx.ui.setFooter(() => ({
-      invalidate() {},
-      render() {
-        return [];
-      },
-    }));
+    ctx.ui.setFooter((_tui, _theme, footerData) => {
+      activeFooterData = footerData;
+      return new HiddenFooter();
+    });
   });
 
   pi.on("thinking_level_select", (event, ctx) => {
