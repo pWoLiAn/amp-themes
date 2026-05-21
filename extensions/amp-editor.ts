@@ -403,7 +403,7 @@ class AmpEditor extends CustomEditor {
     private readonly getCtx: () => ExtensionContext,
     private readonly getThinkingLevel: () => string,
     private readonly getWorkingState: () => WorkingState,
-    private readonly openCommandPalette: (initialQuery: string | undefined, onSelect: (result: CommandPaletteResult) => void, items?: CommandPaletteItem[] | CommandPaletteItemsProvider, preview?: CommandPalettePreviewProvider, maxRows?: number, noAutoSelect?: boolean) => void,
+    private readonly openCommandPalette: (initialQuery: string | undefined, onSelect: (result: CommandPaletteResult) => void, items?: CommandPaletteItem[] | CommandPaletteItemsProvider, preview?: CommandPalettePreviewProvider, maxRows?: number, noAutoSelect?: boolean, inputPrefix?: string) => void,
     private readonly getFooterStatuses: () => string[],
   ) {
     super(tui, theme, keybindings, { paddingX: 1 });
@@ -431,7 +431,7 @@ class AmpEditor extends CustomEditor {
         const path = query.startsWith("/") || query.startsWith("~/") ? result.insertText ?? result.command : result.command;
         this.insertTextAtCursor(formatAtMention(path));
         this.tui.requestRender();
-      }, (query, signal) => getAtMentionItems(this.ctx.cwd, query, signal), getAtMentionPreview, MAX_AT_MENTION_ITEMS, true);
+      }, (query, signal) => getAtMentionItems(this.ctx.cwd, query, signal), getAtMentionPreview, MAX_AT_MENTION_ITEMS, true, "@");
       return;
     }
 
@@ -705,7 +705,7 @@ export default function (pi: ExtensionAPI) {
     requestRender();
   };
 
-  const openCommandPalette = (initialQuery = "", onSelect: (result: CommandPaletteResult) => void, items?: CommandPaletteItem[] | CommandPaletteItemsProvider, preview?: CommandPalettePreviewProvider, maxRows?: number, noAutoSelect = false) => {
+  const openCommandPalette = (initialQuery = "", onSelect: (result: CommandPaletteResult) => void, items?: CommandPaletteItem[] | CommandPaletteItemsProvider, preview?: CommandPalettePreviewProvider, maxRows?: number, noAutoSelect = false, inputPrefix = "/") => {
     const ctx = activeCtx;
     if (!ctx?.hasUI || commandPaletteOpen) return;
 
@@ -722,6 +722,7 @@ export default function (pi: ExtensionAPI) {
         preview,
         maxRows,
         noAutoSelect,
+        inputPrefix,
       ),
       {
         overlay: true,

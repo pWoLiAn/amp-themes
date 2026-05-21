@@ -90,6 +90,7 @@ export class CommandPaletteOverlay implements Component {
     private readonly previewProvider?: CommandPalettePreviewProvider,
     private readonly maxRows = DEFAULT_MAX_ROWS,
     private readonly noAutoSelect = false,
+    private readonly inputPrefix = "/",
   ) {
     this.query = initialQuery.replace(/^\//, "");
     this.scheduleItemLoad(0);
@@ -377,7 +378,7 @@ export class CommandPaletteOverlay implements Component {
   }
 
   private renderInput(width: number): string {
-    const prompt = this.fg("dim", "> ");
+    const prompt = this.fg("dim", "> ") + this.fg("accent", this.inputPrefix);
     const text = this.fg("text", this.query);
     return truncateToWidth(prompt + text, width, "…", false);
   }
